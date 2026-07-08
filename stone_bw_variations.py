@@ -39,24 +39,56 @@ def load_gray(path, upscale=1.5, max_width=1800):
     return gray
 
 
+def clear_borders(binary_inv, border_margin=10):
+    """Remove connected components touching the image edges (shadows, borders)."""
+    h, w = binary_inv.shape
+    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(binary_inv, connectivity=8)
+    clean = np.zeros_like(binary_inv)
+    for i in range(1, num_labels):
+        x = stats[i, cv2.CC_STAT_LEFT]
+        y = stats[i, cv2.CC_STAT_TOP]
+        sw = stats[i, cv2.CC_STAT_WIDTH]
+        sh = stats[i, cv2.CC_STAT_HEIGHT]
+        
+        # Check if component touches the border
+        touches_border = (
+            x <= border_margin or 
+            y <= border_margin or 
+            x + sw >= w - border_margin or 
+            y + sh >= h - border_margin
+        )
+        if not touches_border:
+            clean[labels == i] = 255
+    return clean
+
+
 def otsu_global(gray):
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
     _, out = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    return out
+    # Clear borders by inverting, clearing, and inverting back
+    inv = cv2.bitwise_not(out)
+    clean_inv = clear_borders(inv)
+    return cv2.bitwise_not(clean_inv)
 
 
 def adaptive_mean(gray):
     blur = cv2.medianBlur(gray, 5)
-    return cv2.adaptiveThreshold(
+    binary = cv2.adaptiveThreshold(
         blur, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 35, 10
     )
+    inv = cv2.bitwise_not(binary)
+    clean_inv = clear_borders(inv)
+    return cv2.bitwise_not(clean_inv)
 
 
 def adaptive_gaussian(gray):
     blur = cv2.medianBlur(gray, 5)
-    return cv2.adaptiveThreshold(
+    binary = cv2.adaptiveThreshold(
         blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 35, 10
     )
+    inv = cv2.bitwise_not(binary)
+    clean_inv = clear_borders(inv)
+    return cv2.bitwise_not(clean_inv)
 
 
 def full_clean_pipeline(
@@ -92,9 +124,23 @@ def full_clean_pipeline(
 
     num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(inv, connectivity=8)
     clean_inv = np.zeros_like(inv)
+    h, w = inv.shape
+    border_margin = 10
     for i in range(1, num_labels):
         if stats[i, cv2.CC_STAT_AREA] >= min_component_size:
-            clean_inv[labels == i] = 255
+            x = stats[i, cv2.CC_STAT_LEFT]
+            y = stats[i, cv2.CC_STAT_TOP]
+            sw = stats[i, cv2.CC_STAT_WIDTH]
+            sh = stats[i, cv2.CC_STAT_HEIGHT]
+            
+            touches_border = (
+                x <= border_margin or 
+                y <= border_margin or 
+                x + sw >= w - border_margin or 
+                y + sh >= h - border_margin
+            )
+            if not touches_border:
+                clean_inv[labels == i] = 255
 
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
     clean_inv = cv2.morphologyEx(clean_inv, cv2.MORPH_CLOSE, kernel, iterations=1)
