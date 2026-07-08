@@ -27,7 +27,6 @@ app.add_middleware(
 )
 
 STATIC_DIR = os.path.join(CURRENT_DIR, "static")
-os.makedirs(STATIC_DIR, exist_ok=True)
 
 def to_base64_data_url(img, format_name=".png"):
     """Helper to convert OpenCV image to base64 Data URL."""
