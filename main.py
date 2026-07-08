@@ -1,12 +1,11 @@
 import os
 import sys
-import uuid
-import shutil
+import base64
 import cv2
 import numpy as np
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 # Ensure the current directory is in python path
@@ -16,7 +15,7 @@ if CURRENT_DIR not in sys.path:
 
 import stone_bw_variations
 
-app = FastAPI(title="Stone Inscription Preprocessor Server")
+app = FastAPI(title="Stone Inscription Preprocessor Server (Stateless)")
 
 # Enable CORS for local development
 app.add_middleware(
@@ -27,12 +26,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Output and Static directories setup
-OUTPUTS_DIR = os.path.join(CURRENT_DIR, "outputs")
 STATIC_DIR = os.path.join(CURRENT_DIR, "static")
-
-os.makedirs(OUTPUTS_DIR, exist_ok=True)
 os.makedirs(STATIC_DIR, exist_ok=True)
+
+def to_base64_data_url(img, format_name=".png"):
+    """Helper to convert OpenCV image to base64 Data URL."""
+    _, buffer = cv2.imencode(format_name, img)
+    b64_str = base64.b64encode(buffer).decode("utf-8")
+    mime_type = "image/png" if format_name == ".png" else "image/jpeg"
+    return f"data:{mime_type};base64,{b64_str}"
 
 @app.post("/process")
 async def process_image(file: UploadFile = File(...)):
@@ -40,20 +42,33 @@ async def process_image(file: UploadFile = File(...)):
     if not file.filename.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.webp')):
         raise HTTPException(status_code=400, detail="Invalid image file format.")
     
-    # Create unique session ID
-    session_id = uuid.uuid4().hex
-    session_dir = os.path.join(OUTPUTS_DIR, session_id)
-    os.makedirs(session_dir, exist_ok=True)
-    
-    # Save raw uploaded image
-    input_filename = f"raw_{file.filename}"
-    input_path = os.path.join(session_dir, input_filename)
-    with open(input_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-        
     try:
-        # Load image as grayscale
-        gray = stone_bw_variations.load_gray(input_path, upscale=1.5)
+        # Read file bytes in memory
+        raw_bytes = await file.read()
+        
+        # Convert bytes to OpenCV image
+        nparr = np.frombuffer(raw_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        if img is None:
+            raise ValueError("Failed to decode image.")
+            
+        # Convert raw uploaded image to base64
+        # Guess mime type based on extension
+        ext = os.path.splitext(file.filename)[1].lower()
+        raw_format = ".png" if ext == ".png" else ".jpg"
+        raw_base64 = to_base64_data_url(img, raw_format)
+        
+        # Convert to gray
+        # Port load_gray logic to in-memory image
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        h, w = gray.shape
+        max_width = 1800
+        upscale = 1.5
+        if w * upscale > max_width:
+            upscale = max_width / w
+        if upscale != 1.0:
+            gray = cv2.resize(gray, None, fx=upscale, fy=upscale, interpolation=cv2.INTER_CUBIC)
         
         # Define variations
         variations = [
@@ -66,38 +81,48 @@ async def process_image(file: UploadFile = File(...)):
             ("07_clean_bold", stone_bw_variations.full_clean_pipeline(gray, denoise_strength=15, min_component_size=60, bold=True)),
         ]
         
-        # Save output images
+        # Save output images as base64 strings in response
         results = {}
         for name, out_img in variations:
-            filename = f"{name}.png"
-            filepath = os.path.join(session_dir, filename)
-            cv2.imwrite(filepath, out_img)
-            results[name] = f"/outputs/{session_id}/{filename}"
+            results[name] = to_base64_data_url(out_img, ".png")
             
-        # Make contact sheet
-        contact_sheet_filename = "contact_sheet.png"
-        contact_sheet_path = os.path.join(session_dir, contact_sheet_filename)
-        stone_bw_variations.make_contact_sheet(variations, contact_sheet_path)
+        # Generate contact sheet in-memory
+        # Recreate make_contact_sheet logic to return base64
+        thumbs = []
+        thumb_width = 500
+        for label, var_img in variations:
+            vh, vw = var_img.shape[:2]
+            scale = thumb_width / vw
+            thumb = cv2.resize(var_img, (thumb_width, int(vh * scale)))
+            thumb_bgr = cv2.cvtColor(thumb, cv2.COLOR_GRAY2BGR)
+            cv2.putText(thumb_bgr, label, (8, 22), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.6, (0, 0, 255), 2, cv2.LINE_AA)
+            thumbs.append(thumb_bgr)
+
+        cols = 2
+        rows = (len(thumbs) + cols - 1) // cols
+        th, tw = thumbs[0].shape[:2]
+        sheet = np.full((th * rows, tw * cols, 3), 255, dtype=np.uint8)
+        for idx, thumb in enumerate(thumbs):
+            r, c = divmod(idx, cols)
+            sheet[r * th:(r + 1) * th, c * tw:(c + 1) * tw] = thumb
+            
+        contact_sheet_base64 = to_base64_data_url(sheet, ".png")
         
         return JSONResponse({
             "success": True,
-            "session_id": session_id,
-            "raw_image": f"/outputs/{session_id}/{input_filename}",
+            "raw_image": raw_base64,
             "variations": results,
-            "contact_sheet": f"/outputs/{session_id}/{contact_sheet_filename}"
+            "contact_sheet": contact_sheet_base64
         })
         
     except Exception as e:
-        # Cleanup directory on failure
-        shutil.rmtree(session_dir, ignore_errors=True)
         raise HTTPException(status_code=500, detail=f"Image processing failed: {str(e)}")
-
-# Mount outputs static files route
-app.mount("/outputs", StaticFiles(directory=OUTPUTS_DIR), name="outputs")
 
 # Mount frontend static files route (must be mounted last)
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
 
 if __name__ == "__main__":
     import uvicorn
+    # Vercel needs standard run, locally run on port 8050
     uvicorn.run(app, host="127.0.0.1", port=8050)
