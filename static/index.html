@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Generate and download multiple black-and-white preprocessed variations of stone inscriptions for dataset curation and OCR optimization.">
+    <title>Stone Inscription Preprocessor & B/W Tuner</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome for Premium Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Background subtle gradient glow -->
+    <div class="bg-glow bg-glow-1"></div>
+    <div class="bg-glow bg-glow-2"></div>
+
+    <div class="app-container">
+        <!-- Premium Glass Header -->
+        <header class="app-header animate-fade-in">
+            <div class="header-content">
+                <div class="logo-area">
+                    <div class="logo-icon"><i class="fa-solid fa-gem"></i></div>
+                    <div class="logo-text">
+                        <h1>Stone Inscription</h1>
+                        <span>B/W PREPROCESSOR & TUNER</span>
+                    </div>
+                </div>
+                <div class="header-status">
+                    <span class="status-badge"><span class="pulse-dot"></span> Standing Standalone</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Workspace -->
+        <main class="workspace">
+            <!-- Upload Panel -->
+            <section id="upload-section" class="panel animate-slide-up">
+                <div class="panel-header">
+                    <h2>Upload Inscription Photo</h2>
+                    <p>Select a raw stone carving photo to generate 7 distinct black-and-white variations.</p>
+                </div>
+                
+                <div class="drop-zone" id="drop-zone">
+                    <input type="file" id="file-input" accept="image/*" class="file-input">
+                    <div class="drop-zone-content">
+                        <div class="upload-icon-wrapper">
+                            <i class="fa-solid fa-cloud-arrow-up"></i>
+                        </div>
+                        <h3>Drag & Drop Inscription Image</h3>
+                        <p class="formats">Supports PNG, JPG, JPEG, WEBP, BMP</p>
+                        <button type="button" class="btn btn-primary" id="browse-btn">
+                            <i class="fa-solid fa-folder-open"></i> Browse Files
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Loading State Overlay -->
+            <div id="loading-overlay" class="loading-overlay hidden">
+                <div class="loader-card">
+                    <div class="spinner">
+                        <div class="double-bounce1"></div>
+                        <div class="double-bounce2"></div>
+                    </div>
+                    <h3>Processing Inscription...</h3>
+                    <p>Running multi-thresholding ensemble & denoising filters.</p>
+                </div>
+            </div>
+
+            <!-- Results Section -->
+            <section id="results-section" class="results-container hidden">
+                <!-- Action Bar -->
+                <div class="action-bar animate-fade-in">
+                    <div class="action-title">
+                        <h2 id="uploaded-filename">processed_inscription.jpg</h2>
+                        <span class="badge" id="word-count-badge">7 B/W Variations Ready</span>
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn btn-secondary" id="reset-btn">
+                            <i class="fa-solid fa-arrow-left"></i> Upload New
+                        </button>
+                        <a href="#" class="btn btn-accent" id="download-sheet-btn" download>
+                            <i class="fa-solid fa-table-cells"></i> Download Contact Sheet
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Split Workspace Grid -->
+                <div class="split-grid">
+                    <!-- Left: Original Image Viewer -->
+                    <div class="card original-viewer animate-slide-up">
+                        <div class="card-header">
+                            <h3><i class="fa-solid fa-image"></i> Original Image</h3>
+                        </div>
+                        <div class="image-wrapper">
+                            <img id="original-preview" src="" alt="Original inscription input">
+                        </div>
+                    </div>
+
+                    <!-- Right: Variations Feed -->
+                    <div class="variations-feed animate-slide-up" style="animation-delay: 0.1s;">
+                        <!-- Grid of 7 Variations -->
+                        <div class="variations-grid" id="variations-grid">
+                            <!-- JS will inject variation cards here -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Premium Footer -->
+        <footer class="app-footer animate-fade-in">
+            <p>&copy; 2026 Ancient Tamil Script Preprocessing Tool. Created Standalone & Optimized.</p>
+        </footer>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
